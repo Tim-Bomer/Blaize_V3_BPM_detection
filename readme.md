@@ -41,7 +41,8 @@ Button Changes
 Password Handling
 - Changed the realPass variable to a single space, to speed up startup process.
 
-
+Kick_detection_visual.pde
+- This file can be used to visuallize and adjust the behaviour of the botched BPM detection algorithm. 
 
 
 

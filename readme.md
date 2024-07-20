@@ -1,3 +1,51 @@
+# Blaize 3 + botched BPM detection 
+This fork introduces a new BPM detection algorithm, adding kick detection integration and dynamic preset speed control. The application's visual effects now adjust in real-time based on the detected BPM, making it more responsive to music.
+
+This code will now analyze the energy content of a specific frequency, particularly the frequency of a kick drum. By monitoring the energy at this frequency and comparing it to a predefined dynamic threshold, the code counts occurrences where the energy surpasses the threshold. This count is then used to estimate the Beats Per Minute (BPM) of the music over time. This method is particularly effective for music genres such as techno and house, where the kick drum is a prominent element. During segments of a track where the kick drum is less dominant, the estimated BPM may decrease but will quickly adjust back to the previously determined BPM when the kick drum reappears.
+
+The code also includes modifications to improve the communication with an accompanying app. These modifications include disabling certain buttons to streamline the user interface and adjusting the speed slider to function as a multiplier, allowing for fine-tuning of the animation speeds. 
+
+#It is botched but works :)
+While the BPM estimation may not always be perfectly synchronized with the beat, the ability to slow down animations during transitions or build-ups significantly enhances the overall experience. This approach ensures smoother and more dynamic visual transitions in sync with the music's tempo variations.
+
+# How to setup
+To set up the application, download Voicemeeter or similar software for audio routing:
+
+Windows Sound Settings:
+- Playback: Default should be Voicemeeter
+- Recording: Default should be Voicemeeter Output
+  
+Voicemeeter Configuration:
+- No hardware inputs (mic not needed).
+- Virtual Input: Input from the PC.
+- Hardware Output: Set to the desired device.
+
+The code utilizes the Minim library to handle virtual input for audio analysis. Once the setup is complete, you can run blaize_v3.pde as usual to see the BPM estimation and animation adjustments in action.
+
+
+
+# Summary of major changes 
+Kick Detection Integration
+- Added the Minim library for audio processing.
+- Implemented kick detection with way to many parameters.
+- Developed methods to detect kick events and calculate BPM.
+
+BPM and Preset Speed Integration
+- Linked BPM detection with preset speed control for dynamic adjustment.
+- Introduced variables to manage preset speed limits and multipliers.
+
+Button Changes
+- Updated color button initialization with new colors.
+- Adjusted initial values for buttons and sliders, such that the App cannot disrubt the BPM detection.
+
+Password Handling
+- Changed the realPass variable to a single space, to speed up startup process.
+
+
+
+
+
+
 # Blaize 3
 Software to turn your projector into a safe disco laser \
 [Blaize 3 Demo Video](https://www.youtube.com/watch?v=ziG_0-8F9Vg) | [Blaize 3 HowTo Video](https://www.youtube.com/watch?v=TjnYWlusAS8)

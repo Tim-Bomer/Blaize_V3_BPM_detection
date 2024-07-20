@@ -1,12 +1,20 @@
-// lib32z1 worked for App Export on MacOS //<>//
+// For ease of accces ctrl+F:
+// NETWORKING - for app connection stuff
+// COLOR - for chaning button collors
 
-//import processing.opengl.*; //<>// //<>// //<>//
+
+//import processing.opengl.*; //<>// //<>//
 import java.awt.event.KeyEvent;
 //import processing.video.*;
 import java.awt.AWTException;
 //import processing.core.*;
 import processing.net.*;
 import java.net.InetAddress;
+
+//////////////////////// KICK DETECTION
+import ddf.minim.*;
+import ddf.minim.analysis.*;
+////////////////////////
 
 Server s;
 Client CC;
@@ -38,7 +46,7 @@ final int LMZxsize = 460;
 final int LMZysize = 340;
 
 int presetNumber = 0;                    // 0 - 15
-int presetSpeed      = 30;               // 0 - 100
+int presetSpeed      = 50;               // 0 - 100
 int presetSizeDestination = 50;          // easing
 int presetBrightnessDestination = 100;   // easing
 int presetStrobing   = 0;                // 0 - 100
@@ -76,7 +84,7 @@ boolean dontShowStartupScreenAnymore = false;
 boolean hideControlWindow = false;
 
 String pass = "";
-String realPass = "BodgedButWorks";
+String realPass = " ";
 String PCname;
 String myIP;
 
@@ -84,6 +92,55 @@ PImage miniImage;
 PImage AeroTraxBall;
 
 
+//////////////////////// KICK DETECTION 
+// !!!!!!!!!!!!!!!!!!!!!!! TUNE THESE PARAMETERS USING THE kick_detection_visual.pde !!!!!!!!!!!!!!!!!!!!!!!!!!
+Minim minim;
+AudioInput in;
+FFT fft;
+int graphWidth;
+float[] energyGraph;
+int graphIndex = 0;
+
+// Parameters for kick detection
+float thresholdMultiplier = 0.95f;
+int energyHistorySize = 1000;
+float maxEnergyPeak = 0;
+float thresholdAdaptiveness = 0.05f;
+float kickDetectionLowFreq = 40; // Lower frequency range for kick detection
+float kickDetectionHighFreq = 90; // Higher frequency range for kick detection
+float minEnergyLevel = 130; // Minimum energy level for adaptive threshold adjustment
+
+// BPM estimation parameters
+float bpmDecayRate = 0.99f;
+int bpmWindowSize = 8;
+int bpmLowerLimit = 30;
+long kickDetectionDebounceTime = 200;
+long noKickDecayTime = 2000;
+int minExpectedBPM = 120;
+int maxExpectedBPM = 170;
+
+// Additional parameters for managing BPM and energy detection
+float estimatedBPM = 0;
+ArrayList<Float> recentBPMValues = new ArrayList<Float>();
+int recentBPMSize = 20;
+ArrayList<Float> energyHistory = new ArrayList<Float>();
+float adaptiveThreshold = 1;
+ArrayList<Long> kickTimes = new ArrayList<Long>();
+float current_bpm = 0;
+long lastKickDetectionTime = 0;
+boolean isKickPresent = false;
+////////////////////////
+
+//////////////////////// KICK INTEGRATION
+// Define the presetSpeed limits
+int presetSpeedLowerLimit = 10;
+int presetSpeedUpperLimit = 90;
+int presetSpeedMultiplier = 50;               // 0 - 100
+
+float presetSpeedMultiplier_lowestFactor = 0.5;
+float presetSpeedMultiplier_highestFactor = 2.5;
+
+////////////////////////
 
 
 
@@ -185,11 +242,12 @@ void setup() {
 
   //QuadPhaseLED = createGraphics(20, 20);
 
-
+  // COLORING __________________________________________________________________________________________________________________________________  
   S[32] = new rectbutton(color(255, 0, 0), 0*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Red
   S[33] = new rectbutton(color(255, 255, 0), 1*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Yellow
   S[34] = new rectbutton(color(  0, 255, 0), 2*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Green
-  S[35] = new rectbutton(color(  0, 255, 255), 3*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Türkis
+  //S[34] = new rectbutton(color(  55, 0, 0), 2*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Green
+  S[35] = new rectbutton(color(  255, 155, 0), 3*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Türkis
   S[36] = new rectbutton(color(  0, 0, 255), 4*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Blue
   S[37] = new rectbutton(color(255, 0, 255), 5*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // Violet
   S[38] = new rectbutton(color(255, 255, 255), 6*(cmdWindowWidth-10)/8+5, 4*85+5, (cmdWindowWidth)/8, 80, 0, "COLOR");    // White
@@ -203,7 +261,7 @@ void setup() {
   //X[5] = new slider(color(30),color(80),0*155+5,7*85+5,460,80,"Dynamic");
   X[6] = new slider(color(30), color(80), 0*155+5, 6*85+5, 460, 80, "Shading");
 
-  X[0].value = 30;   
+  X[0].value = 50;   
   X[1].value = 50;   
   X[2].value = 100;   
   X[3].value = 0;   
@@ -218,16 +276,22 @@ void setup() {
   O[6] = new onoffbutton(color(255, 0, 0), 2*155+5, 5*85+5, 150, 80, 0, "Nudge +");
   O[7] = new onoffbutton(color(255, 0, 0), 1*155+5, 5*85+5, 150, 80, 0, "Nudge -");
   //O[8] = new onoffbutton(color(255,0,0),1*155+5,4*85+5,150,80,0,"Hide (h)");
+  
+  
+  //////////////////////// KICK DETECTION
+  minim = new Minim(this); // Initializing the Minim library
+  in = minim.getLineIn(Minim.STEREO, 2048); // Getting line-in audio input
+  fft = new FFT(in.bufferSize(), in.sampleRate()); // Initializing the FFT object
+
+  current_bpm = bpmLowerLimit; // Initializing BPM to the lower limit
+  
+  // Initializing variables for kick detection and BPM calculation
+  isKickPresent = false;              
+  adaptiveThreshold = minEnergyLevel; 
+  estimatedBPM = minExpectedBPM;     
+  ////////////////////////
+
 } 
-
-
-
-
-
-
-
-
-
 
 
 
@@ -248,6 +312,66 @@ void draw() {
       }
     }
   }
+
+  
+  //////////////////////// KICK DETECTION
+  fft.forward(in.mix); // Performing FFT analysis on the mixed audio input
+  
+    // Analyzing low frequency energy for kick detection
+    float lowFreqEnergy = fft.calcAvg(kickDetectionLowFreq, kickDetectionHighFreq);
+    updateEnergyHistory(lowFreqEnergy); // Updating the energy history for adaptive threshold calculation
+    if (lowFreqEnergy > minEnergyLevel) {
+      adaptiveThreshold = calculateAdaptiveThreshold(lowFreqEnergy);
+    }
+  
+    // Detecting kicks based on the adaptive threshold
+    boolean kickDetected = lowFreqEnergy > adaptiveThreshold;
+    if (kickDetected) {
+      isKickPresent = true;
+      maxEnergyPeak = max(maxEnergyPeak, lowFreqEnergy);
+      // Debouncing kick detection
+      if (kickTimes.isEmpty() || millis() - kickTimes.get(kickTimes.size() - 1) > kickDetectionDebounceTime) {
+        kickTimes.add(Long.valueOf(millis()));
+        calculateBPM(); // Calculating BPM on kick detection
+        lastKickDetectionTime = millis();
+      }
+    } else {
+      // Handling the absence of kicks
+      if (millis() - lastKickDetectionTime > noKickDecayTime) {
+        isKickPresent = false;
+      }
+    }
+  
+    // Applying BPM decay when no kicks are detected for a while
+    if (!isKickPresent && millis() - lastKickDetectionTime > noKickDecayTime) {
+      current_bpm *= bpmDecayRate;
+      if (current_bpm < bpmLowerLimit) {
+        current_bpm = bpmLowerLimit;
+        adaptiveThreshold = minEnergyLevel; // Resetting the adaptive threshold
+      }
+    } else if (isKickPresent) {
+      // Adjusting BPM based on recent kick detection
+      if(current_bpm + 20 < estimatedBPM && estimatedBPM > bpmLowerLimit) {
+        current_bpm = estimatedBPM;
+      }
+    }
+  
+    // Ensuring BPM stays within expected limits
+    current_bpm = constrain(current_bpm, bpmLowerLimit, maxExpectedBPM);
+  
+    // Printing current BPM to the console
+    //println("Current BPM: " + nf(current_bpm, 0, 2));
+    bpm = (int)current_bpm;
+
+  ////////////////////////
+  
+  //////////////////////// KICK INTEGRATION
+  //CUSTOM DRAW
+  updatePresetSpeed((int)current_bpm);
+  //println("For BPM " + current_bpm + ", the presetSpeed is: " + test_presetSpeed);
+  //println("For BPM " + current_bpm + ", the presetSpeed is: " + presetSpeed);
+  ////////////////////////
+
 
 
   //easing
@@ -968,7 +1092,8 @@ void draw() {
 
     textSize(20); 
     fill(0, 200, 255);
-    text("IP: " + myIP, frameSizeX+315, 590);
+    //text("IP CASANOVA: [192.168.178.192] " + myIP, frameSizeX+315, 590);
+    text("IP: Windows > Settings > Network & internet > Properties", frameSizeX+315, 590);
     pushMatrix();
     rotate(-HALF_PI);
     textSize(40); 
@@ -1090,7 +1215,11 @@ void draw() {
       int _adress = -1;
       int _data   = -1;
 
-      for (int k=0; k<vals1.length; k++) {
+      // Define the array of addresses for buttons to disable
+      //adress multicolor = 36, hide = 42, bpm 38,line move = 41, blackout = 37,  +-bpm = 254, nudge - = 52, nudge + = 51
+      int[] disabledButtons = {37,38,42,41,254,52,51}; // Example addresses to disable
+      
+      for (int k = 0; k < vals1.length; k++) {
         String[] vals2 = split(vals1[k], 'V');
         if (vals2.length == 2) {
           _adress = int(vals2[0]);
@@ -1099,8 +1228,22 @@ void draw() {
           _adress = -1;
           _data   = -1;
         }
-
-
+      
+        // Check if the current address is in the list of disabled buttons
+        boolean isDisabled = false;
+        for (int i = 0; i < disabledButtons.length; i++) {
+          if (_adress == disabledButtons[i]) {
+            isDisabled = true;
+            break; // Exit the loop early if we find a match
+          }
+        }
+      
+        if (isDisabled) {
+          continue; // Skip the rest of the loop for this iteration
+        }
+      
+        println("Triggered address: " + _adress);
+        
         if (_adress <= 31  &&  _data == 0) {                                                 // 0-31 Presets, 32-35 Color buttons
           S[_adress].doStuff();
         } else if (_adress == 32  &&  _data >= 0  &&  _data <= 7) {                            // Color Buttons 0-7
@@ -1109,7 +1252,10 @@ void draw() {
 
         //adress 33, 34, 35 now free (formerly Color Buttons Green, Blue, Random)
 
+        //adress multicolor = 36, hide = 42, bpm 38,line move = 41, blackout = 37, 
         else if (_adress >= 36  &&  _adress <= 42) {                                         // onoffbuttons
+        //println("Triggered address: " + _adress); // Add this line to print the address // checking what adress is triggered
+ 
           if (_data == 1) {  
             O[_adress-36].buttonState =  true; 
             O[_adress-36].doStuff();
@@ -1129,6 +1275,7 @@ void draw() {
           if (_data == 1) {  
             O[_adress-45].buttonState =  true; 
             O[_adress-45].doStuff();
+            //bpm = 140;
           }
         } else if (_adress == 254  &&  _data >= 60  &&  _data <= 180) {                        // bpm set value
           bpm = _data;
@@ -1141,6 +1288,128 @@ void draw() {
     }
   }
 }
+
+
+
+//////////////////////// KICK INTEGRATION
+// Define the BPM limits
+//int bpmLowerLimit = 30;
+
+//int bpmUpperLimit = (int)maxExpectedBPM;
+
+
+// Define a global variable for presetSpeed
+//int test_presetSpeed = 0;
+
+// Function to map BPM to presetSpeed and update the global presetSpeed variable
+//void updatePresetSpeed(int current_bpm) {
+//  presetSpeed = (current_bpm - bpmLowerLimit) * (presetSpeedUpperLimit - presetSpeedLowerLimit) / (maxExpectedBPM - bpmLowerLimit) + presetSpeedLowerLimit;
+//}
+
+// Function to map BPM to presetSpeed and update the global presetSpeed variable, incorporating the speed multiplier
+
+
+void updatePresetSpeed(float current_bpm) {
+  // Mapping presetSpeedMultiplier to a multiplier value
+  float multiplier;
+  if (presetSpeedMultiplier <= 50) {
+    // Linearly interpolate between X and 1 when presetSpeedMultiplier is between 0 and 50
+    multiplier = map(presetSpeedMultiplier, 0, 50, presetSpeedMultiplier_lowestFactor, 1);
+  } else {
+    // Linearly interpolate between 1 and X when presetSpeedMultiplier is between 50 and 100
+    multiplier = map(presetSpeedMultiplier, 50, 100, 1, presetSpeedMultiplier_highestFactor);
+  }
+
+  // Adjusting presetSpeed based on current_bpm, presetSpeed limits, and the multiplier
+  float adjustedSpeed = (current_bpm - bpmLowerLimit) * (presetSpeedUpperLimit - presetSpeedLowerLimit) / (maxExpectedBPM - bpmLowerLimit) + presetSpeedLowerLimit;
+  // Applying the multiplier to the adjustedSpeed
+  adjustedSpeed *= multiplier;
+
+  // Updating the global presetSpeed variable (assuming it's declared elsewhere in your code)
+  presetSpeed = (int)adjustedSpeed;
+}
+
+
+
+////////////////////////
+
+
+
+//////////////////////// KICK DETECTION
+// Updates the energy history with the latest low frequency energy value
+void updateEnergyHistory(float energy) {
+  energyHistory.add(energy); // Adding the current energy to the history
+  if(energyHistory.size() > energyHistorySize) {
+    energyHistory.remove(0); // Ensuring the energy history size does not exceed the specified limit
+  }
+}
+
+// Calculates an adaptive threshold based on the recent energy history
+float calculateAdaptiveThreshold(float currentEnergy) {
+  float sum = 0;
+  int count = 0; // Count of energies above the minimum energy level
+  for (Float e : energyHistory) {
+    if (e > minEnergyLevel) {
+      sum += e;
+      count++;
+    }
+  }
+  // Calculating the current average energy from values above the minimum energy level
+  float currentAverageEnergy = (count > 0) ? sum / count : minEnergyLevel;
+  // Calculating the current threshold based on the maximum energy peak and the average energy
+  float currentThreshold = max(minEnergyLevel, min(maxEnergyPeak * thresholdMultiplier, currentAverageEnergy * thresholdMultiplier));
+  // Adjusting the adaptive threshold using the adaptiveness parameter
+  adaptiveThreshold = (adaptiveThreshold * (1 - thresholdAdaptiveness)) + (currentThreshold * thresholdAdaptiveness);
+  return adaptiveThreshold;
+}
+
+
+// Calculates the BPM based on the time intervals between detected kicks
+void calculateBPM() {
+  if(kickTimes.size() < 2) return; // Requires at least two kicks to calculate BPM
+
+  // Determining the window size for BPM calculation
+  int windowSize = min(bpmWindowSize, kickTimes.size());
+  long totalTime = 0;
+  // Summing the time intervals between consecutive kicks within the window
+  for(int i = kickTimes.size() - 1; i > kickTimes.size() - windowSize; i--) {
+    totalTime += (kickTimes.get(i) - kickTimes.get(i - 1));
+  }
+  // Calculating the average interval and converting it to BPM
+  float avgInterval = totalTime / (float)(windowSize - 1);
+  float calculatedBPM = 60000 / avgInterval;
+
+  // Setting the current and estimated BPM if the calculated BPM is within expected limits
+  if (calculatedBPM >= minExpectedBPM && calculatedBPM <= maxExpectedBPM) {
+    current_bpm = calculatedBPM;
+    estimatedBPM = current_bpm;
+  }
+}
+
+// Updates the estimated BPM based on recent BPM values
+void calculateEstimatedBPM() {
+  if (recentBPMValues.size() >= recentBPMSize) {
+    float sum = 0;
+    for (Float bpmValue : recentBPMValues) {
+      sum += bpmValue; // Summing the stored BPM values
+    }
+    // Calculating the average BPM and rounding to the nearest whole number
+    estimatedBPM = round(sum / recentBPMValues.size());
+  }
+}
+
+// Updates the list of recent BPM values with a new BPM if a kick is present
+void updateBPM(float newBPM) {
+  if (isKickPresent && newBPM >= minExpectedBPM && newBPM <= maxExpectedBPM) {
+    if (recentBPMValues.size() >= recentBPMSize) {
+      recentBPMValues.remove(0); // Ensuring the list size does not exceed the specified limit
+    }
+    recentBPMValues.add(newBPM); // Adding the new BPM to the list
+    calculateEstimatedBPM(); // Updating the estimated BPM based on recent values
+  }
+}
+
+////////////////////////
 
 
 
@@ -1617,7 +1886,9 @@ class slider {
 
   void doStuff() {
     if     (modifier == "Speed"      ) {  
-      presetSpeed      = value;
+      //presetSpeed      = value ;
+      presetSpeedMultiplier = value;
+      println(presetSpeedMultiplier);
     } else if (modifier == "Size"       ) {  
       presetSizeDestination       = value;
     } else if (modifier == "Brightness" ) {  
@@ -1629,3 +1900,15 @@ class slider {
     }
   }
 }
+
+
+
+//////////////////////// KICK DETECTION
+// Cleans up resources when the program is stopped
+void stop() {
+  in.close(); // Closing the audio input
+  minim.stop(); // Stopping the Minim audio library
+  super.stop(); // Calling the stop method of the parent class
+}
+
+////////////////////////

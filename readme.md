@@ -5,7 +5,7 @@ This code will now analyze the energy content of a specific frequency, particula
 
 The code also includes modifications to improve the communication with an accompanying app. These modifications include disabling certain buttons to streamline the user interface and adjusting the speed slider to function as a multiplier, allowing for fine-tuning of the animation speeds. 
 
-#It is botched but works :)
+#It is botched but works
 While the BPM estimation may not always be perfectly synchronized with the beat, the ability to slow down animations during transitions or build-ups significantly enhances the overall experience. This approach ensures smoother and more dynamic visual transitions in sync with the music's tempo variations.
 
 # How to setup
